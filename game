@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Floppa's Casino</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Apply Inter font globally */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Basic tab styling */
+        .tab-button { cursor: pointer; }
+        .tab-button.active { border-bottom-color: #4f46e5; color: #4f46e5; font-weight: 600; }
+        .tab-button:disabled { color: #9ca3af; cursor: not-allowed; }
+        .game-content { display: none; }
+        .game-content.active { display: block; }
+
+        /* Coin flip animation */
+        @keyframes flip { 0% { transform: rotateY(0deg); } 50% { transform: rotateY(180deg); } 100% { transform: rotateY(360deg); } }
+        .coin.flipping { animation: flip 0.6s ease-out; }
+        .coin { width: 60px; height: 60px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 1.25rem; font-weight: bold; color: white; margin: 0.5rem auto; transition: background-color 0.3s ease; }
+        .coin-heads { background-color: #f59e0b; } .coin-tails { background-color: #84cc16; } .coin-default { background-color: #9ca3af; }
+
+        /* Blackjack card styling */
+        .card {
+            display: inline-block;
+            border: 1px solid #ccc;
+            border-radius: 0.375rem; /* rounded-md */
+            padding: 0.5rem 0.75rem;
+            margin: 0.25rem;
+            min-width: 40px; /* Ensure minimum width */
+            min-height: 58px; /* Ensure minimum height consistent with padding */
+            text-align: center;
+            background-color: white;
+            font-size: 1rem;
+            opacity: 1;
+            transform: translateY(0);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            box-sizing: border-box;
+            vertical-align: middle;
+        }
+        .card.red { color: #ef4444; }
+        .card.black { color: #1f2937; }
+
+        /* Blackjack card dealing animation */
+        @keyframes dealCard {
+            from { opacity: 0; transform: translateY(-10px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .card-enter {
+            animation: dealCard 0.3s ease-out forwards;
+        }
+        /* Placeholder for the hidden card */
+        .card-placeholder {
+             display: inline-block;
+             border: 1px dashed #9ca3af; /* Dashed border */
+             border-radius: 0.375rem;
+             padding: 0.5rem 0.75rem;
+             margin: 0.25rem;
+             min-width: 40px;
+             min-height: 58px;
+             background-color: #e5e7eb; /* Lighter gray */
+             box-sizing: border-box;
+             vertical-align: middle;
+             /* No text content needed */
+         }
+        .card-placeholder.card-enter { /* Also animate placeholder */
+             animation: dealCard 0.3s ease-out forwards;
+         }
+
+
+        /* Case opening styles ... */
+        .case-item-display { overflow: hidden; white-space: nowrap; position: relative; height: 60px; border: 1px solid #e5e7eb; border-radius: 0.375rem; margin-bottom: 1rem; background-color: #f9fafb; }
+        .case-item-reel { display: flex; position: absolute; left: 0; height: 100%; align-items: center; }
+        .case-item { padding: 0 1rem; font-size: 1rem; text-align: center; height: 100%; display: flex; align-items: center; justify-content: center; min-width: 100px; border-right: 1px solid #e5e7eb; flex-shrink: 0; box-sizing: border-box; }
+        .case-item:last-child { border-right: none; }
+        .case-marker { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 3px; height: 100%; background-color: #ef4444; z-index: 10; }
+        .rarity-Common { color: #6b7280; } .rarity-Uncommon { color: #3b82f6; } .rarity-Rare { color: #8b5cf6; } .rarity-Mythical { color: #ec4899; } .rarity-Legendary { color: #f59e0b; }
+
+        /* Utility class for disabling controls */
+        .control-disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-start min-h-screen p-4 pt-8">
+
+    <div class="bg-white p-6 md:p-8 rounded-lg shadow-lg w-full max-w-2xl text-center">
+        <h1 class="text-2xl md:text-3xl font-bold mb-2 text-gray-800">Floppa's Casino</h1>
+
+        <div class="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+            <p class="text-lg text-gray-700">Your Balance:</p>
+            <p id="balance" class="text-4xl font-semibold text-green-600">$100</p>
+             <button id="resetButton" onclick="resetBalance()" class="mt-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-1 px-3 rounded-lg shadow text-xs transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75">
+                Reset Balance
+            </button>
+        </div>
+
+        <div class="border-b border-gray-200 mb-6">
+            <nav class="-mb-px flex justify-center space-x-6" aria-label="Tabs">
+                <button class="tab-button py-3 px-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 focus:outline-none active" data-target="coinFlip">
+                    Coin Flip
+                </button>
+                <button class="tab-button py-3 px-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 focus:outline-none" data-target="blackjack">
+                    Blackjack
+                </button>
+                <button class="tab-button py-3 px-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 focus:outline-none" data-target="caseOpener">
+                    Case Opener
+                </button>
+            </nav>
+        </div>
+
+        <div id="gameArea">
+            <div id="coinFlip" class="game-content active">
+                 <h2 class="text-xl font-semibold mb-3 text-gray-700">Coin Flip</h2>
+                 <div id="coin-display" class="coin coin-default" aria-live="polite">?</div>
+                <div class="mb-3"> <label for="cfBetAmount" class="block text-sm font-medium text-gray-700 mb-1">Bet Amount:</label> <input type="number" id="cfBetAmount" min="1" step="1" class="w-full max-w-xs mx-auto px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., 10"> </div>
+                <div class="flex justify-center space-x-4 mb-3"> <button id="cfHeadsButton" onclick="cfPlaceBet('Heads')" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-5 rounded-lg shadow transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-opacity-75"> Heads </button> <button id="cfTailsButton" onclick="cfPlaceBet('Tails')" class="bg-lime-500 hover:bg-lime-600 text-white font-bold py-2 px-5 rounded-lg shadow transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-opacity-75"> Tails </button> </div>
+                <div id="cfMessage" class="mt-3 text-gray-700 h-10" aria-live="polite">Place your bet!</div>
+            </div>
+
+            <div id="blackjack" class="game-content">
+                 <h2 class="text-xl font-semibold mb-3 text-gray-700">Blackjack</h2>
+                <div class="mb-3"> <label for="bjBetAmount" class="block text-sm font-medium text-gray-700 mb-1">Bet Amount:</label> <input type="number" id="bjBetAmount" min="1" step="1" class="w-full max-w-xs mx-auto px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., 10"> </div>
+                 <button id="bjDealButton" onclick="bjStartGame()" class="mb-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-5 rounded-lg shadow transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75"> Deal Hand </button>
+                <div id="bjGameArea" class="hidden">
+                    <div class="mb-4"> <h3 class="text-lg font-medium text-gray-600">Dealer's Hand (<span id="bjDealerScore">0</span>)</h3> <div id="bjDealerCards" class="min-h-[58px]"></div> </div>
+                    <div class="mb-4"> <h3 class="text-lg font-medium text-gray-600">Your Hand (<span id="bjPlayerScore">0</span>)</h3> <div id="bjPlayerCards" class="min-h-[58px]"></div> </div>
+                    <div class="flex justify-center space-x-4 mb-3"> <button id="bjHitButton" onclick="bjHit()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-5 rounded-lg shadow transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-75"> Hit </button> <button id="bjStandButton" onclick="bjStand()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-5 rounded-lg shadow transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75"> Stand </button> </div>
+                </div>
+                <div id="bjMessage" class="mt-3 text-gray-700 h-10" aria-live="polite">Place your bet and deal.</div>
+            </div>
+
+            <div id="caseOpener" class="game-content">
+                 <h2 class="text-xl font-semibold mb-3 text-gray-700">Case Opener</h2>
+                <p class="text-gray-600 mb-3">Cost to Open: <span id="caseCostDisplay">$5</span></p>
+                <div class="case-item-display"> <div class="case-marker"></div> <div id="caseItemReel" class="case-item-reel"></div> </div>
+                <button id="openCaseButton" onclick="coOpenCase()" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-5 rounded-lg shadow transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-75"> Open Case </button>
+                 <div id="coMessage" class="mt-3 text-gray-700 h-10" aria-live="polite">Click to open a case!</div>
+                 <div id="coResult" class="mt-2 text-lg font-semibold h-6"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Global State ---
+        let balance = 100;
+        const initialBalance = 100;
+        let currentBet = 0;
+        let activeGameControlsDisabled = false;
+        let bjGameInProgress = false;
+        let bjDealerHiddenCard = null; // Stores the actual data for the dealer's hidden card
+
+        // --- Global DOM Elements ---
+        const balanceElement = document.getElementById('balance');
+        const resetButton = document.getElementById('resetButton');
+        const gameArea = document.getElementById('gameArea');
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const gameContents = document.querySelectorAll('.game-content');
+
+        // --- Coin Flip DOM Elements ---
+        const cfBetAmountElement = document.getElementById('cfBetAmount');
+        const cfMessageElement = document.getElementById('cfMessage');
+        const cfCoinDisplayElement = document.getElementById('coin-display');
+        const cfHeadsButton = document.getElementById('cfHeadsButton');
+        const cfTailsButton = document.getElementById('cfTailsButton');
+
+        // --- Blackjack DOM Elements ---
+        const bjBetAmountElement = document.getElementById('bjBetAmount');
+        const bjMessageElement = document.getElementById('bjMessage');
+        const bjDealButton = document.getElementById('bjDealButton');
+        const bjHitButton = document.getElementById('bjHitButton');
+        const bjStandButton = document.getElementById('bjStandButton');
+        const bjGameAreaElement = document.getElementById('bjGameArea');
+        const bjPlayerCardsElement = document.getElementById('bjPlayerCards');
+        const bjDealerCardsElement = document.getElementById('bjDealerCards');
+        const bjPlayerScoreElement = document.getElementById('bjPlayerScore');
+        const bjDealerScoreElement = document.getElementById('bjDealerScore');
+
+        // --- Case Opener DOM Elements & Constants ---
+        const coMessageElement = document.getElementById('coMessage');
+        const coResultElement = document.getElementById('coResult');
+        const openCaseButton = document.getElementById('openCaseButton');
+        const caseItemReelElement = document.getElementById('caseItemReel');
+        const caseCostDisplayElement = document.getElementById('caseCostDisplay');
+        const coCaseCost = 5;
+
+        // --- Initialization ---
+        caseCostDisplayElement.textContent = `$${coCaseCost}`;
+        updateBalanceDisplay();
+        setupTabs();
+
+        // --- Global Functions ---
+        function updateBalanceDisplay() { /* Updates balance & control states */ balanceElement.textContent = `$${balance}`; updateControlStates(); }
+        function resetBalance() { /* Resets everything */ balance = initialBalance; activeGameControlsDisabled = false; bjGameInProgress = false; bjDealerHiddenCard = null; cfResetGameUI(); bjResetGameUI(); coResetUI(); updateBalanceDisplay(); switchTab(tabButtons[0]); }
+        function showMessage(elementId, text, type = 'info') { /* Shows message */ const el = document.getElementById(elementId); if (!el) return; el.textContent = text; el.className = 'mt-3 text-gray-700 h-10'; if (type === 'win') el.classList.add('text-green-600'); else if (type === 'loss') el.classList.add('text-red-600'); else if (type === 'error') el.classList.add('text-red-700', 'font-semibold'); }
+        function disableActiveGameControls() { /* Disables controls */ activeGameControlsDisabled = true; updateControlStates(); }
+        function enableGameControls() { /* Enables controls */ activeGameControlsDisabled = false; updateControlStates(); }
+
+        function updateControlStates() { /* Updates enable/disable state of all controls */
+            const canBet = balance > 0 && !activeGameControlsDisabled;
+            const canOpenCase = balance >= coCaseCost && !activeGameControlsDisabled;
+            // Coin Flip
+            const cfDisabled = !canBet; [cfBetAmountElement, cfHeadsButton, cfTailsButton].forEach(el => { el.disabled = cfDisabled; el.classList.toggle('control-disabled', cfDisabled); });
+            // Blackjack
+            const bjBetDisabled = !canBet || bjGameInProgress; const bjDealDisabled = !canBet || bjGameInProgress || activeGameControlsDisabled; const bjHitStandDisabled = !bjGameInProgress || activeGameControlsDisabled;
+            bjBetAmountElement.disabled = bjBetDisabled; bjDealButton.disabled = bjDealDisabled; bjHitButton.disabled = bjHitStandDisabled; bjStandButton.disabled = bjHitStandDisabled;
+            bjBetAmountElement.classList.toggle('control-disabled', bjBetDisabled); bjDealButton.classList.toggle('control-disabled', bjDealDisabled); bjHitButton.classList.toggle('control-disabled', bjHitStandDisabled); bjStandButton.classList.toggle('control-disabled', bjHitStandDisabled);
+            // Case Opener
+            const coDisabled = !canOpenCase; openCaseButton.disabled = coDisabled; openCaseButton.classList.toggle('control-disabled', coDisabled);
+            // Global
+            resetButton.disabled = false; resetButton.classList.remove('control-disabled');
+            tabButtons.forEach(button => { button.disabled = false; button.classList.remove('control-disabled'); });
+        }
+
+        // --- Tab Navigation ---
+        function setupTabs() { /* Sets up tab switching */ tabButtons.forEach(button => button.addEventListener('click', () => { if (!activeGameControlsDisabled) switchTab(button); })); }
+        function switchTab(clickedButton) { /* Switches tabs */ if (clickedButton.classList.contains('active')) return; const targetId = clickedButton.dataset.target; tabButtons.forEach(b => b.classList.toggle('active', b === clickedButton)); gameContents.forEach(c => c.classList.toggle('active', c.id === targetId)); updateControlStates(); }
+
+        // --- Coin Flip Game Logic ---
+        function cfResetGameUI() { /* Resets CF UI */ cfBetAmountElement.value = ''; showMessage('cfMessage', 'Place your bet!'); cfCoinDisplayElement.textContent = '?'; cfCoinDisplayElement.className = 'coin coin-default'; }
+        function cfPlaceBet(playerChoice) { /* Handles CF bet */ const bet = parseInt(cfBetAmountElement.value); if (isNaN(bet) || bet <= 0) { showMessage('cfMessage', 'Invalid bet.', 'error'); return; } if (bet > balance) { showMessage('cfMessage', 'Bet exceeds balance.', 'error'); return; } disableActiveGameControls(); showMessage('cfMessage', 'Flipping...'); cfCoinDisplayElement.className = 'coin coin-default flipping'; setTimeout(() => { const result = Math.random() < 0.5 ? 'Heads' : 'Tails'; cfCoinDisplayElement.classList.remove('flipping', 'coin-default'); cfCoinDisplayElement.textContent = result === 'Heads' ? 'H' : 'T'; cfCoinDisplayElement.classList.add(result === 'Heads' ? 'coin-heads' : 'coin-tails'); if (result === playerChoice) { balance += bet; showMessage('cfMessage', `It's ${result}! You won $${bet}!`, 'win'); } else { balance -= bet; showMessage('cfMessage', `It's ${result}. You lost $${bet}.`, 'loss'); } updateBalanceDisplay(); if (balance <= 0) { showMessage('cfMessage', 'Game Over!', 'error'); } else { enableGameControls(); } }, 600); }
+
+        // --- Blackjack Game Logic ---
+        const bjSuits = ['♥', '♦', '♣', '♠']; const bjRanks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        let bjDeck = []; let bjPlayerHand = []; let bjDealerHand = [];
+        function bjCreateDeck() { bjDeck = []; for (const s of bjSuits) for (const r of bjRanks) bjDeck.push({ suit: s, rank: r }); }
+        function bjShuffleDeck() { for (let i = bjDeck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bjDeck[i], bjDeck[j]] = [bjDeck[j], bjDeck[i]]; } }
+        function bjGetCardValue(c) { if (!c) return 0; if (['J', 'Q', 'K'].includes(c.rank)) return 10; if (c.rank === 'A') return 11; return parseInt(c.rank); }
+        function bjCalculateScore(hand) { let score = hand.reduce((s, c) => s + bjGetCardValue(c), 0); let aces = hand.filter(c => c.rank === 'A').length; while (score > 21 && aces > 0) { score -= 10; aces--; } return score; }
+
+        function bjRenderCard(card, animate = false) { /* Renders a visible card */ const el = document.createElement('span'); el.classList.add('card'); el.textContent = `${card.rank}${card.suit}`; el.classList.toggle('red', ['♥', '♦'].includes(card.suit)); el.classList.toggle('black', ['♣', '♠'].includes(card.suit)); if (animate) { el.classList.add('card-enter'); } return el; }
+        function bjCreateHiddenCardPlaceholder(animate = false) { /* Creates hidden card placeholder */ const el = document.createElement('span'); el.classList.add('card-placeholder'); if (animate) { el.classList.add('card-enter'); } return el; }
+
+        function bjRenderHands(hideDealer = false, animatePlayer = false, animateDealer = false) { /* Renders hands */
+            const currentPlayerCards = bjPlayerCardsElement.children.length; const currentDealerCards = bjDealerCardsElement.children.length;
+            bjPlayerCardsElement.innerHTML = ''; bjDealerCardsElement.innerHTML = '';
+            // Player hand
+            bjPlayerHand.forEach((card, index) => { const anim = animatePlayer && index >= currentPlayerCards; bjPlayerCardsElement.appendChild(bjRenderCard(card, anim)); });
+            // Dealer hand
+            bjDealerHand.forEach((card, index) => {
+                 const isFirst = index === 0; const anim = animateDealer && index >= currentDealerCards;
+                 if (isFirst && hideDealer) { bjDealerCardsElement.appendChild(bjCreateHiddenCardPlaceholder(anim)); }
+                 else { bjDealerCardsElement.appendChild(bjRenderCard(card, anim)); }
+            });
+            // Scores
+            bjPlayerScoreElement.textContent = bjCalculateScore(bjPlayerHand);
+            let dealerVisibleHand = hideDealer ? bjDealerHand.slice(1) : bjDealerHand;
+            bjDealerScoreElement.textContent = bjCalculateScore(dealerVisibleHand);
+        }
+
+        function bjResetGameUI() { /* Resets BJ UI */ bjDealerHiddenCard = null; bjGameAreaElement.classList.add('hidden'); bjPlayerCardsElement.innerHTML = ''; bjDealerCardsElement.innerHTML = ''; bjPlayerScoreElement.textContent = '0'; bjDealerScoreElement.textContent = '0'; showMessage('bjMessage', 'Place bet & deal.'); bjBetAmountElement.value = ''; }
+
+        function bjStartGame() { /* Starts a Blackjack game */
+            if (bjGameInProgress || activeGameControlsDisabled) return;
+            currentBet = parseInt(bjBetAmountElement.value); if (isNaN(currentBet) || currentBet <= 0) { showMessage('bjMessage', 'Invalid bet.', 'error'); return; } if (currentBet > balance) { showMessage('bjMessage', 'Bet exceeds balance.', 'error'); return; }
+            balance -= currentBet; bjGameInProgress = true; updateBalanceDisplay(); disableActiveGameControls();
+            bjCreateDeck(); bjShuffleDeck(); bjPlayerHand = []; bjDealerHand = []; bjDealerHiddenCard = null;
+            bjGameAreaElement.classList.remove('hidden'); showMessage('bjMessage', 'Dealing...'); bjPlayerCardsElement.innerHTML = ''; bjDealerCardsElement.innerHTML = '';
+            let dealDelay = 150;
+            const dealCard = (targetHand, isPlayerHand, isDealerFirstHidden = false) => { /* Deals one card */
+                return new Promise(resolve => { setTimeout(() => { const cardData = bjDeck.pop(); targetHand.push(cardData); if (isDealerFirstHidden) { bjDealerHiddenCard = cardData; bjDealerCardsElement.appendChild(bjCreateHiddenCardPlaceholder(true)); } else { const cardElement = bjRenderCard(cardData, true); if (isPlayerHand) { bjPlayerCardsElement.appendChild(cardElement); } else { bjDealerCardsElement.appendChild(cardElement); } } bjPlayerScoreElement.textContent = bjCalculateScore(bjPlayerHand); bjDealerScoreElement.textContent = bjCalculateScore(bjDealerHand.slice(1)); resolve(); }, dealDelay); }); };
+            // Deal sequence
+            dealCard(bjPlayerHand, true).then(() => dealCard(bjDealerHand, false, true)).then(() => dealCard(bjPlayerHand, true)).then(() => dealCard(bjDealerHand, false, false)).then(() => { /* After dealing */ showMessage('bjMessage', 'Hit or Stand?'); const pScore = bjCalculateScore(bjPlayerHand); const dScore = bjCalculateScore([bjDealerHiddenCard, ...bjDealerHand.slice(1)]); if (pScore === 21 || dScore === 21) { setTimeout(() => bjEndGame(true), 500); } else { enableGameControls(); } });
+        }
+
+        function bjHit() { /* Player hits */ if (!bjGameInProgress || activeGameControlsDisabled) return; disableActiveGameControls(); bjPlayerHand.push(bjDeck.pop()); bjRenderHands(true, true, false); const score = bjCalculateScore(bjPlayerHand); if (score > 21) { showMessage('bjMessage', 'Bust!', 'loss'); setTimeout(() => bjEndGame(false), 500); } else if (score === 21) { showMessage('bjMessage', '21! Standing...'); setTimeout(() => bjStand(), 500); } else { enableGameControls(); } }
+        function bjStand() { /* Player stands */ if (!bjGameInProgress || activeGameControlsDisabled) return; disableActiveGameControls(); showMessage('bjMessage', "Dealer's turn..."); bjRenderHands(false, false, false); setTimeout(() => bjEndGame(true), 700); }
+
+        function bjDealerTurn() { /* Dealer plays hand */
+            let currentFullHand = [bjDealerHiddenCard, ...bjDealerHand.slice(1)]; // Use full hand data
+            return new Promise(resolve => {
+                 const play = () => { let score = bjCalculateScore(currentFullHand); if (score < 17) { setTimeout(() => { const newCard = bjDeck.pop(); currentFullHand.push(newCard); bjDealerHand.push(newCard); bjRenderHands(false, false, true); play(); }, 500); } else { resolve(score); } }; play(); });
+        }
+
+        async function bjEndGame(playerStood = true) { /* Ends Blackjack game */
+            bjGameInProgress = false; const pScore = bjCalculateScore(bjPlayerHand); const pNat = pScore === 21 && bjPlayerHand.length === 2; let msg = ''; let type = 'info';
+            let finalDealerHand = bjDealerHand.length > 0 ? [bjDealerHiddenCard, ...bjDealerHand.slice(1)] : []; let dScore = bjCalculateScore(finalDealerHand);
+            bjRenderHands(false, false, false); // Reveal final hands
+            if (playerStood && pScore <= 21) { showMessage('bjMessage', "Dealer playing..."); dScore = await bjDealerTurn(); finalDealerHand = bjDealerHand.length > 0 ? [bjDealerHiddenCard, ...bjDealerHand.slice(1)] : []; } // Update score and hand after turn
+            const dNat = dScore === 21 && finalDealerHand.length === 2;
+            // Determine outcome
+            if (pScore > 21) { msg = `Bust! Lost $${currentBet}.`; type = 'loss'; }
+            else if (dScore > 21) { msg = `Dealer busts! Won $${currentBet}!`; balance += currentBet * 2; type = 'win'; }
+            else if (pNat && !dNat) { const win = Math.floor(currentBet * 1.5); msg = `Blackjack! Won $${win}!`; balance += currentBet + win; type = 'win'; }
+            else if (dScore === pScore) { msg = (pNat && dNat) ? `Push! Both Blackjack. Bet $${currentBet} returned.` : `Push! Bet $${currentBet} returned.`; balance += currentBet; type = 'info'; }
+            else if (pScore > dScore) { msg = `You win $${currentBet}!`; balance += currentBet * 2; type = 'win'; }
+            else { msg = `Dealer wins. Lost $${currentBet}.`; type = 'loss'; }
+            showMessage('bjMessage', msg, type); updateBalanceDisplay(); bjDealerHiddenCard = null;
+            if (balance <= 0) { showMessage('bjMessage', 'Game Over!', 'error'); disableActiveGameControls(); } else { enableGameControls(); }
+        }
+
+        // --- Case Opener Game Logic ---
+        const coItems = [ /* Item definitions */ { name: 'P250 | Sand Dune', rarity: 'Common', value: 1, colorClass: 'rarity-Common' }, { name: 'Glock-18 | Groundwater', rarity: 'Common', value: 1, colorClass: 'rarity-Common' }, { name: 'MP7 | Army Recon', rarity: 'Common', value: 1, colorClass: 'rarity-Common' }, { name: 'Tec-9 | Army Mesh', rarity: 'Common', value: 1, colorClass: 'rarity-Common' }, { name: 'USP-S | Forest Leaves', rarity: 'Uncommon', value: 3, colorClass: 'rarity-Uncommon' }, { name: 'Five-SeveN | Forest Night', rarity: 'Uncommon', value: 3, colorClass: 'rarity-Uncommon' }, { name: 'MAC-10 | Palm', rarity: 'Uncommon', value: 3, colorClass: 'rarity-Uncommon' }, { name: 'AK-47 | Safari Mesh', rarity: 'Rare', value: 10, colorClass: 'rarity-Rare' }, { name: 'M4A4 | Urban DDPAT', rarity: 'Rare', value: 10, colorClass: 'rarity-Rare' }, { name: 'AWP | PAW', rarity: 'Mythical', value: 25, colorClass: 'rarity-Mythical' }, { name: 'Desert Eagle | Bronze Deco', rarity: 'Mythical', value: 25, colorClass: 'rarity-Mythical' }, { name: 'M4A1-S | Hyper Beast', rarity: 'Legendary', value: 75, colorClass: 'rarity-Legendary' }, { name: 'AK-47 | Vulcan', rarity: 'Legendary', value: 75, colorClass: 'rarity-Legendary' }, ];
+        const coRarityWeights = { 'Common': 70, 'Uncommon': 20, 'Rare': 6, 'Mythical': 3, 'Legendary': 1 };
+        function coGetRandomItem() { /* Selects random item */ const tW = Object.values(coRarityWeights).reduce((s, w) => s + w, 0); let rN = Math.random() * tW; let r = 'Common'; for (const [rty, w] of Object.entries(coRarityWeights)) { if (rN < w) { r = rty; break; } rN -= w; } const itms = coItems.filter(i => i.rarity === r); if (itms.length === 0) return coItems[0]; return itms[Math.floor(Math.random() * itms.length)]; }
+        function coResetUI() { /* Resets CO UI */ showMessage('coMessage', 'Click to open case!'); coResultElement.textContent = ''; coResultElement.className = 'mt-2 text-lg font-semibold h-6'; caseItemReelElement.innerHTML = ''; caseItemReelElement.style.transition = 'none'; caseItemReelElement.style.transform = 'translateX(0px)'; }
+
+        function coOpenCase() { /* Opens a case */
+            if (balance < coCaseCost || activeGameControlsDisabled) { if (balance < coCaseCost) showMessage('coMessage', 'Not enough balance.', 'error'); return; }
+            balance -= coCaseCost; updateBalanceDisplay(); disableActiveGameControls();
+            showMessage('coMessage', 'Opening...'); coResultElement.textContent = '';
+            const reelItemsCount = 50; const targetItemIndex = reelItemsCount - 10; let winningItem = null; let winningElement = null; caseItemReelElement.innerHTML = '';
+            for (let i = 0; i < reelItemsCount; i++) { let item = (i === targetItemIndex) ? coGetRandomItem() : coGetRandomItem(); if (i === targetItemIndex) winningItem = item; const el = document.createElement('div'); el.classList.add('case-item', item.colorClass); el.textContent = item.name; caseItemReelElement.appendChild(el); if (i === targetItemIndex) winningElement = el; }
+            if (!winningItem || !winningElement) { console.error("Winner assignment failed."); enableGameControls(); return; }
+            const itemWidth = winningElement.getBoundingClientRect().width; const containerWidth = caseItemReelElement.parentElement.offsetWidth; const winningElementCenter = winningElement.offsetLeft + (itemWidth / 2); const markerPosition = containerWidth / 2; const shiftAmount = winningElementCenter - markerPosition; const finalTransform = `translateX(-${shiftAmount}px)`;
+            caseItemReelElement.style.transition = 'none'; caseItemReelElement.style.transform = 'translateX(0px)'; void caseItemReelElement.offsetWidth; // Reflow
+            caseItemReelElement.style.transition = 'transform 4s cubic-bezier(0.2, 0.8, 0.25, 1)'; caseItemReelElement.style.transform = finalTransform;
+            setTimeout(() => {
+                caseItemReelElement.style.transition = 'none'; caseItemReelElement.style.transform = finalTransform; // Snap
+                balance += winningItem.value; showMessage('coMessage', `Unboxed: ${winningItem.name} (+$${winningItem.value})!`, 'win'); coResultElement.textContent = winningItem.name; coResultElement.className = `mt-2 text-lg font-semibold h-6 ${winningItem.colorClass}`; updateBalanceDisplay();
+                if (balance <= 0) { showMessage('coMessage', 'Game Over!', 'error'); } else { if (balance < coCaseCost) { showMessage('coMessage', `Won ${winningItem.name} (+$${winningItem.value}). Not enough for another case.`, 'win'); } enableGameControls(); }
+            }, 4100);
+        }
+
+    </script>
+
+</body>
+</html>
